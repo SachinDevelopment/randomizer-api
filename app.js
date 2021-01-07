@@ -69,6 +69,24 @@ app.get('/lose/:id', async (req, res) => {
     }
 });
 
+app.get('/reset', async (req, res) => {
+    let conn;
+    try {
+        // establish a connection to MariaDB
+        conn = await pool.getConnection();
+        var query = `UPDATE players SET loses=0`;
+        await conn.query(query);
+        var query = `UPDATE players SET wins=0`;
+        await conn.query(query);
+        // return the results
+        res.sendStatus(200);
+    } catch (err) {
+        throw err;
+    } finally {
+        if (conn) return conn.release();
+    }
+});
+
 app.listen(port, () => {
     console.log(`Example app listening at http://localhost:${port}`);
 });
