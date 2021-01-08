@@ -32,9 +32,9 @@ app.get('/reset', async (req, res) => {
     try {
         // establish a connection to MariaDB
         conn = await pool.getConnection();
-        var query = `UPDATE players_test SET loses=0`;
+        var query = `UPDATE players SET loses=0`;
         await conn.query(query);
-        var query = `UPDATE players_test SET wins=0`;
+        var query = `UPDATE players SET wins=0`;
         await conn.query(query);
         // return the results
         res.sendStatus(200);
@@ -52,9 +52,9 @@ app.get('/stats/:id', async (req, res) => {
     try {
         // establish a connection to MariaDB
         conn = await pool.getConnection();
-        var query = `SELECT id, name FROM players_test where id = ${id}`;
+        var query = `SELECT id, name FROM players where id = ${id}`;
         const me = await conn.query(query);
-        query = `SELECT id, name FROM players_test where id != ${id}`;
+        query = `SELECT id, name FROM players where id != ${id}`;
         const others = await conn.query(query);
         const func = () => {
             const promises = others.map(async (player) => {
@@ -82,11 +82,11 @@ app.post('/games', async (req, res) => {
         conn = await pool.getConnection();
         var query = `INSERT INTO games (game_size, winning_side, winners, losers) VALUES (${game_size}, "${winning_side}", "${winners}", "${losers}");`;
         const r = await conn.query(query);
-        var query = `UPDATE players_test SET wins=wins+1 WHERE id in (${winnerIds});`;
+        var query = `UPDATE players SET wins=wins+1 WHERE id in (${winnerIds});`;
         await conn.query(query);
-        var query = `UPDATE players_test SET loses=loses+1 WHERE id in (${loserIds});`;
+        var query = `UPDATE players SET loses=loses+1 WHERE id in (${loserIds});`;
         await conn.query(query);
-        var query = "select * from players_test";
+        var query = "select * from players";
         const result = await conn.query(query);
         // return the results
         res.send(result);
