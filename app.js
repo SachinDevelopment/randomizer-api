@@ -90,10 +90,9 @@ app.post('/games', async (req, res) => {
         await conn.query(query);
         var query = `UPDATE players SET loses=loses+1 WHERE id in (${loserIds});`;
         await conn.query(query);
-        var query = "select * from players";
-        const result = await conn.query(query);
-        // return the results
-        res.send(result);
+        var query = `UPDATE players SET winrate=Round(wins/(loses+wins)*100,0) WHERE loses != 0 and wins != 0;`;
+        await conn.query(query);
+        res.sendStatus(200);
     } catch (err) {
         throw err;
     } finally {
