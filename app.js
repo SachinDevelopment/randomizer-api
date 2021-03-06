@@ -27,24 +27,6 @@ app.get('/players', async (req, res) => {
     }
 });
 
-app.get('/reset', async (req, res) => {
-    let conn;
-    try {
-        // establish a connection to MariaDB
-        conn = await pool.getConnection();
-        var query = `UPDATE players SET loses=0`;
-        await conn.query(query);
-        var query = `UPDATE players SET wins=0`;
-        await conn.query(query);
-        // return the results
-        res.sendStatus(200);
-    } catch (err) {
-        throw err;
-    } finally {
-        if (conn) return conn.release();
-    }
-});
-
 app.get('/stats/:id', async (req, res) => {
     const { id } = req.params;
 
@@ -80,19 +62,61 @@ app.get('/stats/:id', async (req, res) => {
 });
 
 app.post('/games', async (req, res) => {
-    const { game_size, winners, losers, winning_side, winnerIds, loserIds } = req.body;
+    const { game_size, winners, losers, winning_side, winnerIds, loserIds, blue, red } = req.body;
     let conn;
     try {
         conn = await pool.getConnection();
-        var query = `INSERT INTO games (game_size, winning_side, winners, losers) VALUES (${game_size}, "${winning_side}", "${winners}", "${losers}");`;
-        const r = await conn.query(query);
+        
+        var query = `INSERT INTO games (game_size, winning_side, winners, losers, blue, red, date) VALUES (${game_size}, "${winning_side}", "${winners}", "${losers}",  "${blue}", "${red}", "${new Date().toISOString().slice(0, 10)}");`;
+        await conn.query(query);
+        
         var query = `UPDATE players SET wins=wins+1 WHERE id in (${winnerIds});`;
         await conn.query(query);
+       
         var query = `UPDATE players SET loses=loses+1 WHERE id in (${loserIds});`;
         await conn.query(query);
+        
         var query = `UPDATE players SET winrate=Round(wins/(loses+wins)*100,0) WHERE loses != 0 and wins != 0;`;
         await conn.query(query);
+
         res.sendStatus(200);
+    } catch (err) {
+        throw err;
+    } finally {
+        if (conn) return conn.release();
+    }
+});
+
+app.get('/games', async (req, res) => {
+    let conn;
+    try {
+        // establish a connection to MariaDB
+        conn = await pool.getConnection();
+        // create a new query
+        var query = "select * from games";
+        // execute the query and set the result to a new variable
+        var rows = await conn.query(query);
+        // return the results
+        res.send(rows);
+    } catch (err) {
+        throw err;
+    } finally {
+        if (conn) return conn.release();
+    }
+});
+
+app.post('/setRole', async (req, res) => {
+    const { id, role } = req.body;
+    let conn;
+    try {
+        // establish a connection to MariaDB
+        conn = await pool.getConnection();
+        // create a new query
+        var query = `UPDATE players SET role="${role}" WHERE id = ${id};`;
+        // execute the query and set the result to a new variable
+        var rows = await conn.query(query);
+        // return the results
+        res.send(rows);
     } catch (err) {
         throw err;
     } finally {
