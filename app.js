@@ -62,22 +62,33 @@ app.get('/stats/:id', async (req, res) => {
 });
 
 app.post('/games', async (req, res) => {
-    const { game_size, winners, losers, winning_side, winnerIds, loserIds, blue, red } = req.body;
+    const { map, game_size, winners, losers, winning_side, winnerIds, loserIds, blue, red } = req.body;
     let conn;
     try {
         conn = await pool.getConnection();
-        
-        var query = `INSERT INTO games (game_size, winning_side, winners, losers, blue, red, date) VALUES (${game_size}, "${winning_side}", "${winners}", "${losers}",  "${blue}", "${red}", "${new Date().toISOString().slice(0, 10)}");`;
+
+        var query = `INSERT INTO games (game_size, winning_side, winners, losers, blue, red, date, map) VALUES (${game_size}, "${winning_side}", "${winners}", "${losers}",  "${blue}", "${red}", "${new Date().toISOString().slice(0, 10)}", "${map}");`;
         await conn.query(query);
-        
-        var query = `UPDATE players SET wins=wins+1 WHERE id in (${winnerIds});`;
-        await conn.query(query);
-       
-        var query = `UPDATE players SET loses=loses+1 WHERE id in (${loserIds});`;
-        await conn.query(query);
-        
-        var query = `UPDATE players SET winrate=Round(wins/(loses+wins)*100,0) WHERE loses != 0 and wins != 0;`;
-        await conn.query(query);
+
+        if (map === 'Howling Abyss') {
+            var query = `UPDATE players SET aram_wins=aram_wins+1 WHERE id in (${winnerIds});`;
+            await conn.query(query);
+
+            var query = `UPDATE players SET aram_loses=aram_loses+1 WHERE id in (${loserIds});`;
+            await conn.query(query);
+
+            var query = `UPDATE players SET aram_winrate=Round(aram_wins/(aram_loses+aram_wins)*100,0) WHERE aram_loses != 0 and aram_wins != 0;`;
+            await conn.query(query);
+        } else {
+            var query = `UPDATE players SET wins=wins+1 WHERE id in (${winnerIds});`;
+            await conn.query(query);
+
+            var query = `UPDATE players SET loses=loses+1 WHERE id in (${loserIds});`;
+            await conn.query(query);
+
+            var query = `UPDATE players SET winrate=Round(wins/(loses+wins)*100,0) WHERE loses != 0 and wins != 0;`;
+            await conn.query(query);
+        }
 
         res.sendStatus(200);
     } catch (err) {
@@ -93,7 +104,7 @@ app.get('/games', async (req, res) => {
         // establish a connection to MariaDB
         conn = await pool.getConnection();
         // create a new query
-        var query = "select * from games";
+        var query = "select * from games_test";
         // execute the query and set the result to a new variable
         var rows = await conn.query(query);
         // return the results
