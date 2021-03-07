@@ -62,12 +62,12 @@ app.get('/stats/:id', async (req, res) => {
 });
 
 app.post('/games', async (req, res) => {
-    const { map, game_size, winners, losers, winning_side, winnerIds, loserIds, blue, red } = req.body;
+    const { map, game_size, winners, losers, winning_side, winnerIds, loserIds, blue, red, date } = req.body;
     let conn;
     try {
         conn = await pool.getConnection();
 
-        var query = `INSERT INTO games (game_size, winning_side, winners, losers, blue, red, date, map) VALUES (${game_size}, "${winning_side}", "${winners}", "${losers}",  "${blue}", "${red}", "${new Date().toISOString().slice(0, 10)}", "${map}");`;
+        var query = `INSERT INTO games (game_size, winning_side, winners, losers, blue, red, date, map) VALUES (${game_size}, "${winning_side}", "${winners}", "${losers}",  "${blue}", "${red}", "${date}", "${map}");`;
         await conn.query(query);
 
         if (map === 'Howling Abyss') {
@@ -104,7 +104,7 @@ app.get('/games', async (req, res) => {
         // establish a connection to MariaDB
         conn = await pool.getConnection();
         // create a new query
-        var query = "select * from games_test";
+        var query = "select * from games";
         // execute the query and set the result to a new variable
         var rows = await conn.query(query);
         // return the results
