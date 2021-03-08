@@ -134,16 +134,17 @@ app.post('/games', async (req, res) => {
 });
 
 app.get('/games', async (req, res) => {
+    const { page, limit } = req.query;
     let conn;
     try {
-        // establish a connection to MariaDB
         conn = await pool.getConnection();
-        // create a new query
-        var query = "select * from games";
-        // execute the query and set the result to a new variable
-        var rows = await conn.query(query);
-        // return the results
-        res.send(rows);
+        var query = `select * from games where red is not null order by id desc limit ${limit || 1000} offset ${page*limit-limit || 0};`;
+        var games = await conn.query(query);
+       
+        var query = `select count(*) as count from games where red is not null`;
+        var total = await conn.query(query);
+        
+        res.send({total: total[0].count, games});
     } catch (err) {
         throw err;
     } finally {
