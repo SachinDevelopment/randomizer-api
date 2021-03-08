@@ -61,6 +61,41 @@ app.get('/stats/:id', async (req, res) => {
     }
 });
 
+app.get('/aramStats/:id', async (req, res) => {
+    const { id } = req.params;
+
+    let conn;
+    try {
+        // establish a connection to MariaDB
+        conn = await pool.getConnection();
+        var query = `SELECT id, name FROM players where id = ${id}`;
+        const me = await conn.query(query);
+        query = `SELECT id, name FROM players where id != ${id}`;
+        const others = await conn.query(query);
+        const func = () => {
+            const promises = others.map(async (player) => {
+                query = `SELECT count(*) as count from (SELECT * FROM games WHERE winners LIKE "%${me[0].name}-${me[0].id}%") AS sub WHERE winners LIKE "%${player.name}-${player.id}%" and map="Howling Abyss";`;
+                const teamWinCount = await conn.query(query);
+                query = `SELECT count(*) as count from (SELECT * FROM games WHERE losers LIKE "%${me[0].name}-${me[0].id}%") AS sub WHERE losers LIKE "%${player.name}-${player.id}%" and map="Howling Abyss";`;
+                const teamLoseCount = await conn.query(query);
+                query = `SELECT count(*) as count from (SELECT * FROM games WHERE winners LIKE "%${me[0].name}-${me[0].id}%") AS sub WHERE losers LIKE "%${player.name}-${player.id}%" and map="Howling Abyss";`;
+                const enemyWinCount = await conn.query(query);
+                query = `SELECT count(*) as count from (SELECT * FROM games WHERE losers LIKE "%${me[0].name}-${me[0].id}%") AS sub WHERE winners LIKE "%${player.name}-${player.id}%" and map="Howling Abyss";`;
+                const enemyLoseCount = await conn.query(query);
+                return { player: player.name, teamWins: teamWinCount[0].count, teamLoses: teamLoseCount[0].count, enemyWins: enemyWinCount[0].count, enemyLoses: enemyLoseCount[0].count };
+            });
+            return Promise.all(promises);
+        }
+        const results = await func();
+        return res.send(results);
+    } catch (err) {
+        throw err;
+    } finally {
+        if (conn) return conn.release();
+    }
+});
+
+
 app.post('/games', async (req, res) => {
     const { map, game_size, winners, losers, winning_side, winnerIds, loserIds, blue, red, date } = req.body;
     let conn;
