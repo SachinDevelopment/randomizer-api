@@ -138,32 +138,13 @@ app.get('/games', async (req, res) => {
     let conn;
     try {
         conn = await pool.getConnection();
-        var query = `select * from games where red is not null order by id desc limit ${limit || 1000} offset ${page*limit-limit || 0};`;
+        var query = `select * from games where red is not null and date > "2021-03-06" order by id desc limit ${limit || 1000} offset ${page*limit-limit || 0};`;
         var games = await conn.query(query);
        
-        var query = `select count(*) as count from games where red is not null`;
+        var query = `select count(*) as count from games where red is not null and date > "2021-03-06"`;
         var total = await conn.query(query);
         
         res.send({total: total[0].count, games});
-    } catch (err) {
-        throw err;
-    } finally {
-        if (conn) return conn.release();
-    }
-});
-
-app.post('/setRole', async (req, res) => {
-    const { id, role } = req.body;
-    let conn;
-    try {
-        // establish a connection to MariaDB
-        conn = await pool.getConnection();
-        // create a new query
-        var query = `UPDATE players SET role="${role}" WHERE id = ${id};`;
-        // execute the query and set the result to a new variable
-        var rows = await conn.query(query);
-        // return the results
-        res.send(rows);
     } catch (err) {
         throw err;
     } finally {
