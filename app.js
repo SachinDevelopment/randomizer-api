@@ -8,7 +8,6 @@ const pool = require('./db')
 app.use(bodyParser.json());
 app.use(cors());
 
-// expose an endpoint "people"
 app.get('/players', async (req, res) => {
     let conn;
     try {
@@ -27,6 +26,151 @@ app.get('/players', async (req, res) => {
     }
 });
 
+app.get('/player/:id/stats', async (req, res) => {
+
+    const { id } = req.params;
+    let conn;
+    try {
+        conn = await pool.getConnection();
+
+        var query = `select name from players where id = ${id};`;
+        var [nameResult] = await conn.query(query);
+        var { name } = nameResult;
+
+        var playerquery = `select * from players where id = ${id};`;
+        var [player] = await conn.query(playerquery);
+
+        query = `select count(*) as count from games where (red like "%${id}-Jungle-%-${name}-${id}%" or blue like "%${id}-Jungle-%-${name}-${id}%") and map="Summoner's Rift";`;
+        var [srJungle] = await conn.query(query);
+
+        query = `select count(*) as count from games where (red like "%${id}-Lane-%-${name}-${id}%" or blue like "%${id}-Lane-%-${name}-${id}%") and map="Summoner's Rift";`;
+        var [srLane] = await conn.query(query);
+
+        query = `select count(*) as count from games where (red like "%${id}-Fill-%-${name}-${id}%" or blue like "%${id}-Fill-%-${name}-${id}%") and map="Summoner's Rift";`;
+        var [srFill] = await conn.query(query);
+
+        query = `select count(*) as count from games where (red like "%${id}-Fill-%-${name}-${id}%" or blue like "%${id}-Fill-%-${name}-${id}%") and map="Howling Abyss";`;
+        var [haFill] = await conn.query(query);
+
+        let srChampsQuery = `select blue,red from games where (red like "%${id}%${id}%" or blue like "%${id}%${id}%") and map="Summoner's Rift";`;
+        var srChamps = await conn.query(srChampsQuery);
+
+        srChamps = srChamps.slice(0, srChamps.length);
+        srChamps = srChamps.map((c) => c.red.match(`${id}.*-(.*)-${name}-${id}`) || c.blue.match(`${id}.*-(.*)-${name}-${id}`));
+        srChamps = srChamps.map(c => c[1]);
+        srChamps = [...new Set(srChamps)];
+
+        let haChampsQuery = `select blue,red from games where (red like "%${id}%${id}%" or blue like "%${id}%${id}%") and map="Howling Abyss";`;
+        var haChamps = await conn.query(haChampsQuery);
+
+        haChamps = haChamps.slice(0, haChamps.length);
+        haChamps = haChamps.map((c) => c.red.match(`${id}.*-(.*)-${name}-${id}`) || c.blue.match(`${id}.*-(.*)-${name}-${id}`));
+        haChamps = haChamps.map(c => c[1]);
+        haChamps = [...new Set(haChamps)];
+
+        const func = () => {
+            const promises = srChamps.map(async (champ) => {
+                let query = `select count(*) as count from games where (red like "%${id}-%-${champ}-${name}-${id}%" and winning_side="red") or (blue like "%${id}-%-${champ}-${name}-${id}%" and winning_side="blue") and map="Summoner's Rift";`;
+                const wins = await conn.query(query);
+                query = `select count(*) as count from games where (red like "%${id}-%-${champ}-${name}-${id}%" and winning_side="blue") or (blue like "%${id}-%-${champ}-${name}-${id}%" and winning_side="red") and map="Summoner's Rift";`;
+                const loses = await conn.query(query);
+                return { name: champ, count: wins[0].count + loses[0].count, wins: wins[0].count, loses: loses[0].count, };
+            })
+
+            return Promise.all(promises);
+        }
+
+        const func2 = () => {
+            const promises = haChamps.map(async (champ) => {
+                let query = `select count(*) as count from games where (red like "%${id}-%-${champ}-${name}-${id}%" and winning_side="red") or (blue like "%${id}-%-${champ}-${name}-${id}%" and winning_side="blue") and map="Howling Abyss";`;
+                const wins = await conn.query(query);
+                query = `select count(*) as count from games where (red like "%${id}-%-${champ}-${name}-${id}%" and winning_side="blue") or (blue like "%${id}-%-${champ}-${name}-${id}%" and winning_side="red") and map="Howling Abyss";`;
+                const loses = await conn.query(query);
+                return { name: champ, count: wins[0].count + loses[0].count, wins: wins[0].count, loses: loses[0].count };
+            })
+
+            return Promise.all(promises);
+        }
+
+        const srChampWrArr = await func();
+        const haChampWrArr = await func2();
+
+        console.log('player', player);
+
+        res.send(
+            {
+                ...player,
+                sr: {
+                    lane: srLane.count,
+                    jungle: srJungle.count,
+                    fill: srFill.count,
+                    champs: srChampWrArr,
+                },
+                ha: {
+                    fill: haFill.count,
+                    champs: haChampWrArr,
+                }
+            });
+    } catch (err) {
+        throw err;
+    } finally {
+        if (conn) return conn.release();
+    }
+});
+
+app.get('/player/:id/games', async (req, res) => {
+    const { id } = req.params;
+    let conn;
+    try {
+        conn = await pool.getConnection();
+        var query = `select name from players where id = ${id};`;
+        var [nameResult] = await conn.query(query);
+        var { name } = nameResult;
+
+        var query = `select * from games where (red like "%${id}-%-${id}%" or blue like "%${id}-%-${id}%") order by id desc;`;
+        var rows = await conn.query(query);
+        rows = rows.map(row => {
+            const redPlayers = row.red.split(',');
+            const bluePlayers = row.blue.split(',');
+
+            let winner = false;
+
+            if (row.winning_side === "blue") {
+                winner = bluePlayers.some(element => {
+                    const [, , , player] = element.split('-');
+                    return player === name;
+                });
+            }
+
+            if (row.winning_side === "red") {
+                winner = redPlayers.some(element => {
+                    const [, , , player] = element.split('-');
+                    return player === name;
+                });
+            }
+
+            const redTeam = redPlayers.map(player => {
+                const [id, role, champ, playerName] = player.split('-')
+                return { id, role, player: playerName, champ };
+            });
+
+            const blueTeam = bluePlayers.map(player => {
+                const [id, role, champ, playerName] = player.split('-')
+                return { id, role, player: playerName, champ };
+            });
+
+            const { champ: myChamp } = [...redTeam, ...blueTeam].find((e) => e.player === name);
+
+            return { id: row.id, map: row.map, date: row.date, blue: blueTeam, red: redTeam, winner, myChamp, playerName: name };
+        })
+
+        res.send(rows);
+    } catch (err) {
+        throw err;
+    } finally {
+        if (conn) return conn.release();
+    }
+});
 app.get('/stats/:id', async (req, res) => {
     const { id } = req.params;
 
@@ -138,13 +282,13 @@ app.get('/games', async (req, res) => {
     let conn;
     try {
         conn = await pool.getConnection();
-        var query = `select * from games where red is not null and date > "2021-03-06" order by id desc limit ${limit || 1000} offset ${page*limit-limit || 0};`;
+        var query = `select * from games where red is not null and date > "2021-03-06" order by id desc limit ${limit || 1000} offset ${page * limit - limit || 0};`;
         var games = await conn.query(query);
-       
+
         var query = `select count(*) as count from games where red is not null and date > "2021-03-06"`;
         var total = await conn.query(query);
-        
-        res.send({total: total[0].count, games});
+
+        res.send({ total: total[0].count, games });
     } catch (err) {
         throw err;
     } finally {
