@@ -52,6 +52,15 @@ app.get('/player/:id/stats', async (req, res) => {
         query = `select count(*) as count from games where (red like "%${id}-Fill-%-${name}-${id}%" or blue like "%${id}-Fill-%-${name}-${id}%") and map="Howling Abyss";`;
         var [haFill] = await conn.query(query);
 
+        query = `select count(*) as count from games where ((red like "%${id}-Lane-%-${name}-${id}%" and winning_side="red") or (blue like "%${id}-Lane-%-${name}-${id}%" and winning_side="blue")) and map="Summoner's Rift";`;
+        var [laneWins] = await conn.query(query);
+        const laneWR = srLane.count ? Number(laneWins.count / srLane.count * 100).toFixed(0) : 0;
+        
+        query = `select count(*) as count from games where ((red like "%${id}-Jungle-%-${name}-${id}%" and winning_side="red") or (blue like "%${id}-Jungle-%-${name}-${id}%" and winning_side="blue")) and map="Summoner's Rift";`;
+        var [jungleWins] = await conn.query(query);
+        const jungleWR = srJungle.count ? Number(jungleWins.count / srJungle.count * 100).toFixed(0) : 0;
+
+
         let srChampsQuery = `select blue,red from games where (red like "%${id}%${id}%" or blue like "%${id}%${id}%") and map="Summoner's Rift";`;
         var srChamps = await conn.query(srChampsQuery);
 
@@ -70,9 +79,9 @@ app.get('/player/:id/stats', async (req, res) => {
 
         const func = () => {
             const promises = srChamps.map(async (champ) => {
-                let query = `select count(*) as count from games where (red like "%${id}-%-${champ}-${name}-${id}%" and winning_side="red") or (blue like "%${id}-%-${champ}-${name}-${id}%" and winning_side="blue") and map="Summoner's Rift";`;
+                let query = `select count(*) as count from games where ((red like "%${id}-%-${champ}-${name}-${id}%" and winning_side="red") or (blue like "%${id}-%-${champ}-${name}-${id}%" and winning_side="blue")) and map="Summoner's Rift";`;
                 const wins = await conn.query(query);
-                query = `select count(*) as count from games where (red like "%${id}-%-${champ}-${name}-${id}%" and winning_side="blue") or (blue like "%${id}-%-${champ}-${name}-${id}%" and winning_side="red") and map="Summoner's Rift";`;
+                query = `select count(*) as count from games where ((red like "%${id}-%-${champ}-${name}-${id}%" and winning_side="blue") or (blue like "%${id}-%-${champ}-${name}-${id}%" and winning_side="red")) and map="Summoner's Rift";`;
                 const loses = await conn.query(query);
                 return { name: champ, count: wins[0].count + loses[0].count, wins: wins[0].count, loses: loses[0].count, };
             })
@@ -82,9 +91,9 @@ app.get('/player/:id/stats', async (req, res) => {
 
         const func2 = () => {
             const promises = haChamps.map(async (champ) => {
-                let query = `select count(*) as count from games where (red like "%${id}-%-${champ}-${name}-${id}%" and winning_side="red") or (blue like "%${id}-%-${champ}-${name}-${id}%" and winning_side="blue") and map="Howling Abyss";`;
+                let query = `select count(*) as count from games where ((red like "%${id}-%-${champ}-${name}-${id}%" and winning_side="red") or (blue like "%${id}-%-${champ}-${name}-${id}%" and winning_side="blue")) and map="Howling Abyss";`;
                 const wins = await conn.query(query);
-                query = `select count(*) as count from games where (red like "%${id}-%-${champ}-${name}-${id}%" and winning_side="blue") or (blue like "%${id}-%-${champ}-${name}-${id}%" and winning_side="red") and map="Howling Abyss";`;
+                query = `select count(*) as count from games where ((red like "%${id}-%-${champ}-${name}-${id}%" and winning_side="blue") or (blue like "%${id}-%-${champ}-${name}-${id}%" and winning_side="red")) and map="Howling Abyss";`;
                 const loses = await conn.query(query);
                 return { name: champ, count: wins[0].count + loses[0].count, wins: wins[0].count, loses: loses[0].count };
             })
@@ -95,14 +104,14 @@ app.get('/player/:id/stats', async (req, res) => {
         const srChampWrArr = await func();
         const haChampWrArr = await func2();
 
-        console.log('player', player);
-
         res.send(
             {
                 ...player,
                 sr: {
                     lane: srLane.count,
+                    laneWR,
                     jungle: srJungle.count,
+                    jungleWR,
                     fill: srFill.count,
                     champs: srChampWrArr,
                 },
