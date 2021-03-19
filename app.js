@@ -265,7 +265,7 @@ app.post('/games', async (req, res) => {
             var query = `UPDATE players SET aram_loses=aram_loses+1 WHERE id in (${loserIds});`;
             await conn.query(query);
 
-            var query = `UPDATE players SET aram_winrate=Round(aram_wins/(aram_loses+aram_wins)*100,0) WHERE aram_loses != 0 and aram_wins != 0;`;
+            var query = `UPDATE players SET aram_winrate=Round(aram_wins/(aram_loses+aram_wins)*100,0) WHERE aram_loses+aram_wins != 0;`;
             await conn.query(query);
         } else {
             var query = `UPDATE players SET wins=wins+1 WHERE id in (${winnerIds});`;
@@ -274,7 +274,7 @@ app.post('/games', async (req, res) => {
             var query = `UPDATE players SET loses=loses+1 WHERE id in (${loserIds});`;
             await conn.query(query);
 
-            var query = `UPDATE players SET winrate=Round(wins/(loses+wins)*100,0) WHERE loses != 0 and wins != 0;`;
+            var query = `UPDATE players SET winrate=Round(wins/(loses+wins)*100,0) WHERE loses+wins != 0;`;
             await conn.query(query);
         }
 
@@ -303,6 +303,25 @@ app.get('/games', async (req, res) => {
     } finally {
         if (conn) return conn.release();
     }
+});
+
+app.post('/player', async(req, res) => {
+   
+    const { name } = req.body;
+
+    let conn;
+    try {
+        conn = await pool.getConnection();
+        var query = `insert into players (name,wins,loses,winrate,aram_wins,aram_loses,aram_winrate) values ("${name}",0,0,0,0,0,0);`;
+        var result = await conn.query(query);
+
+        res.sendStatus(200);
+    } catch (err) {
+        throw err;
+    } finally {
+        if (conn) return conn.release();
+    }
+
 });
 
 app.listen(port, () => {
