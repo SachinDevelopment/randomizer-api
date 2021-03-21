@@ -5,6 +5,10 @@ const app = express();
 const cors = require('cors');
 const pool = require('./db')
 
+// ratings constants
+const k = 50;
+const diff = 800;
+
 app.use(bodyParser.json());
 app.use(cors());
 
@@ -55,13 +59,12 @@ app.get('/player/:id/stats', async (req, res) => {
         query = `select count(*) as count from games where ((red like "%${id}-Lane-%-${name}-${id}%" and winning_side="red") or (blue like "%${id}-Lane-%-${name}-${id}%" and winning_side="blue")) and map="Summoner's Rift";`;
         var [laneWins] = await conn.query(query);
         const laneWR = srLane.count ? Number(laneWins.count / srLane.count * 100).toFixed(0) : 0;
-        
+
         query = `select count(*) as count from games where ((red like "%${id}-Jungle-%-${name}-${id}%" and winning_side="red") or (blue like "%${id}-Jungle-%-${name}-${id}%" and winning_side="blue")) and map="Summoner's Rift";`;
         var [jungleWins] = await conn.query(query);
         const jungleWR = srJungle.count ? Number(jungleWins.count / srJungle.count * 100).toFixed(0) : 0;
 
-
-        let srChampsQuery = `select blue,red from games where (red like "%${id}%${id}%" or blue like "%${id}%${id}%") and map="Summoner's Rift";`;
+        let srChampsQuery = `select blue,red from games where (red like "%${id}%${name}-${id}%" or blue like "%${id}%${name}-${id}%") and map="Summoner's Rift";`;
         var srChamps = await conn.query(srChampsQuery);
 
         srChamps = srChamps.slice(0, srChamps.length);
@@ -69,14 +72,13 @@ app.get('/player/:id/stats', async (req, res) => {
         srChamps = srChamps.map(c => c[1]);
         srChamps = [...new Set(srChamps)];
 
-        let haChampsQuery = `select blue,red from games where (red like "%${id}%${id}%" or blue like "%${id}%${id}%") and map="Howling Abyss";`;
+        let haChampsQuery = `select blue,red from games where (red like "%${id}%${name}-${id}%" or blue like "%${id}%${name}-${id}%") and map="Howling Abyss";`;
         var haChamps = await conn.query(haChampsQuery);
 
         haChamps = haChamps.slice(0, haChamps.length);
         haChamps = haChamps.map((c) => c.red.match(`${id}.*-(.*)-${name}-${id}`) || c.blue.match(`${id}.*-(.*)-${name}-${id}`));
         haChamps = haChamps.map(c => c[1]);
         haChamps = [...new Set(haChamps)];
-
         const func = () => {
             const promises = srChamps.map(async (champ) => {
                 let query = `select count(*) as count from games where ((red like "%${id}-%-${champ}-${name}-${id}%" and winning_side="red") or (blue like "%${id}-%-${champ}-${name}-${id}%" and winning_side="blue")) and map="Summoner's Rift";`;
@@ -157,7 +159,7 @@ app.get('/player/:id/games', async (req, res) => {
                     return player === name;
                 });
             }
-
+            const ratingChange = winner ? row.winner_rating : row.loser_rating;
             const redTeam = redPlayers.map(player => {
                 const [id, role, champ, playerName] = player.split('-')
                 return { id, role, player: playerName, champ };
@@ -170,7 +172,7 @@ app.get('/player/:id/games', async (req, res) => {
 
             const { champ: myChamp } = [...redTeam, ...blueTeam].find((e) => e.player === name);
 
-            return { id: row.id, map: row.map, date: row.date, blue: blueTeam, red: redTeam, winner, myChamp, playerName: name };
+            return { id: row.id, map: row.map, date: row.date, blue: blueTeam, red: redTeam, winner, myChamp, playerName: name, ratingChange };
         })
 
         res.send(rows);
@@ -254,11 +256,8 @@ app.post('/games', async (req, res) => {
     let conn;
     try {
         conn = await pool.getConnection();
-
-        var query = `INSERT INTO games (game_size, winning_side, winners, losers, blue, red, date, map) VALUES (${game_size}, "${winning_side}", "${winners}", "${losers}",  "${blue}", "${red}", "${date}", "${map}");`;
-        await conn.query(query);
-
         if (map === 'Howling Abyss') {
+            console.log('aram');
             var query = `UPDATE players SET aram_wins=aram_wins+1 WHERE id in (${winnerIds});`;
             await conn.query(query);
 
@@ -267,6 +266,30 @@ app.post('/games', async (req, res) => {
 
             var query = `UPDATE players SET aram_winrate=Round(aram_wins/(aram_loses+aram_wins)*100,0) WHERE aram_loses+aram_wins != 0;`;
             await conn.query(query);
+
+            // NEW
+            var query = `select sum(aram_rating) as winnerSum from players where id in (${winnerIds});`;
+            let [winnerResult] = await conn.query(query);
+            let { winnerSum } = winnerResult;
+            winnerSum /= game_size;
+
+            var query = `select sum(aram_rating) as loserSum from players where id in (${loserIds});`;
+            let [loserResult] = await conn.query(query);
+            let { loserSum } = loserResult;
+            loserSum /= game_size;
+
+            const probability1 = (1 / (1 + Math.pow(10, (loserSum - winnerSum) / diff)));
+            const probability2 = (1 / (1 + Math.pow(10, (winnerSum - loserSum) / diff)));
+            const winnerRating = k * (1 - probability1);
+            const loserRating = k * (0 - probability2);
+
+            var query = `update players set aram_rating=aram_rating+${winnerRating} where id in (${winnerIds});`;
+            await conn.query(query);
+            var query = `update players set aram_rating=aram_rating+${loserRating} where id in (${loserIds});`;
+            await conn.query(query);
+            var query = `INSERT INTO games (game_size, winning_side, winners, losers, blue, red, date, map, winner_rating, loser_rating) VALUES (${game_size}, "${winning_side}", "${winners}", "${losers}",  "${blue}", "${red}", "${date}", "${map}",${winnerRating},${loserRating});`;
+            await conn.query(query);
+
         } else {
             var query = `UPDATE players SET wins=wins+1 WHERE id in (${winnerIds});`;
             await conn.query(query);
@@ -275,6 +298,29 @@ app.post('/games', async (req, res) => {
             await conn.query(query);
 
             var query = `UPDATE players SET winrate=Round(wins/(loses+wins)*100,0) WHERE loses+wins != 0;`;
+            await conn.query(query);
+
+            // NEW
+            var query = `select sum(rating) as winnerSum from players where id in (${winnerIds});`;
+            let [winnerResult] = await conn.query(query);
+            let { winnerSum } = winnerResult;
+            winnerSum /= game_size;
+
+            var query = `select sum(rating) as loserSum from players where id in (${loserIds});`;
+            let [loserResult] = await conn.query(query);
+            let { loserSum } = loserResult;
+            loserSum /= game_size;
+
+            const probability1 = (1 / (1 + Math.pow(10, (loserSum - winnerSum) / diff)));
+            const probability2 = (1 / (1 + Math.pow(10, (winnerSum - loserSum) / diff)));
+            const winnerRating = k * (1 - probability1);
+            const loserRating = k * (0 - probability2);
+
+            var query = `update players set rating=rating+${winnerRating} where id in (${winnerIds});`;
+            await conn.query(query);
+            var query = `update players set rating=rating+${loserRating} where id in (${loserIds});`;
+            await conn.query(query);
+            var query = `INSERT INTO games (game_size, winning_side, winners, losers, blue, red, date, map, winner_rating, loser_rating) VALUES (${game_size}, "${winning_side}", "${winners}", "${losers}",  "${blue}", "${red}", "${date}", "${map}",${winnerRating},${loserRating});`;
             await conn.query(query);
         }
 
@@ -305,14 +351,14 @@ app.get('/games', async (req, res) => {
     }
 });
 
-app.post('/player', async(req, res) => {
-   
+app.post('/player', async (req, res) => {
+
     const { name } = req.body;
 
     let conn;
     try {
         conn = await pool.getConnection();
-        var query = `insert into players (name,wins,loses,winrate,aram_wins,aram_loses,aram_winrate) values ("${name}",0,0,0,0,0,0);`;
+        var query = `insert into players (name,wins,loses,winrate,aram_wins,aram_loses,aram_winrate,rating,aram_rating) values ("${name}",0,0,0,0,0,0,1500,1500);`;
         var result = await conn.query(query);
 
         res.sendStatus(200);
@@ -323,6 +369,168 @@ app.post('/player', async(req, res) => {
     }
 
 });
+
+app.post('/setRatings', async (req, res) => {
+
+    let conn;
+    try {
+        conn = await pool.getConnection();
+        var query = `select max(id) as count from games;`;
+        var [result] = await conn.query(query);
+        const { count } = result;
+        var query = `update players set rating=1500;`;
+        await conn.query(query);
+        var query = `update players set aram_rating=1500;`;
+        await conn.query(query);
+        console.log('count', count);
+        for (let i = 144; i <= count; i++) {
+            console.log('inside');
+            console.log('i', i);
+            var query = `select * from games where id = ${i};`;
+            var [result] = await conn.query(query);
+
+            if (!result) {
+                console.log('returning out');
+            } else {
+                if (result.map === "Summoner's Rift") {
+                    let winners = result.winners.split(',');
+                    winners = winners.map(w => Number(w.split('-')[1]));
+                    let losers = result.losers.split(',');
+                    losers = losers.map(l => Number(l.split('-')[1]));
+                    const teamSize = losers.length;
+                    winners = winners.toString();
+                    losers = losers.toString();
+
+
+                    //winners
+                    var query = `select sum(rating) as winnerSum from players where id in (${winners});`;
+                    let [winnerResult] = await conn.query(query);
+                    let { winnerSum } = winnerResult;
+                    winnerSum /= teamSize;
+
+                    //losers
+                    var query = `select sum(rating) as loserSum from players where id in (${losers});`;
+                    let [loserResult] = await conn.query(query);
+                    let { loserSum } = loserResult;
+                    loserSum /= teamSize;
+
+
+                    const probability1 = (1 / (1 + Math.pow(10, (loserSum - winnerSum) / diff)));
+                    const probability2 = (1 / (1 + Math.pow(10, (winnerSum - loserSum) / diff)));
+                    const winnerRating = k * (1 - probability1);
+                    const loserRating = k * (0 - probability2);
+
+                    var query = `update players set rating=rating+${winnerRating} where id in (${winners});`;
+                    await conn.query(query);
+                    var query = `update players set rating=rating+${loserRating} where id in (${losers});`;
+                    await conn.query(query);
+                    var query = `update games set winner_rating=${winnerRating},loser_rating=${loserRating} where id = ${i};`;
+                    await conn.query(query);
+                } else {
+
+                    let winners = result.winners.split(',');
+                    winners = winners.map(w => Number(w.split('-')[1]));
+                    let losers = result.losers.split(',');
+                    losers = losers.map(l => Number(l.split('-')[1]));
+                    const teamSize = losers.length;
+                    winners = winners.toString();
+                    losers = losers.toString();
+
+
+                    //winners
+                    var query = `select sum(aram_rating) as winnerSum from players where id in (${winners});`;
+                    let [winnerResult] = await conn.query(query);
+                    let { winnerSum } = winnerResult;
+                    winnerSum /= teamSize;
+
+                    //losers
+                    var query = `select sum(aram_rating) as loserSum from players where id in (${losers});`;
+                    let [loserResult] = await conn.query(query);
+                    let { loserSum } = loserResult;
+                    loserSum /= teamSize;
+
+                    const probability1 = (1 / (1 + Math.pow(10, (loserSum - winnerSum) / diff)));
+                    const probability2 = (1 / (1 + Math.pow(10, (winnerSum - loserSum) / diff)));
+                    const winnerRating = k * (1 - probability1);
+                    const loserRating = k * (0 - probability2);
+
+                    var query = `update players set aram_rating=aram_rating+${winnerRating} where id in (${winners});`;
+                    await conn.query(query);
+                    var query = `update players set aram_rating=aram_rating+${loserRating} where id in (${losers});`;
+                    await conn.query(query);
+                    var query = `update games set winner_rating=${winnerRating},loser_rating=${loserRating} where id = ${i};`;
+                    await conn.query(query);
+                }
+            }
+        }
+        res.sendStatus(200);
+    } catch (err) {
+        throw err;
+    } finally {
+        if (conn) return conn.release();
+    }
+
+});
+
+// app.post('/aramRating', async (req, res) => {
+
+//     let conn;
+//     try {
+//         conn = await pool.getConnection();
+//         var query = `update players set aram_rating=1500;`;
+//         await conn.query(query);
+//         for (let i = 145; i < 201; i++) {
+//             console.log('i', i);
+//             var query = `select * from games where id = ${i} and map="Howling Abyss";`;
+//             var [result] = await conn.query(query);
+
+//             if (result) {
+//                 console.log('result not skipped', i)
+//                 let winners = result.winners.split(',');
+//                 winners = winners.map(w => Number(w.split('-')[1]));
+//                 let losers = result.losers.split(',');
+//                 losers = losers.map(l => Number(l.split('-')[1]));
+//                 const teamSize = losers.length;
+//                 winners = winners.toString();
+//                 losers = losers.toString();
+
+
+//                 //winners
+//                 var query = `select sum(aram_rating) as winnerSum from players where id in (${winners});`;
+//                 let [winnerResult] = await conn.query(query);
+//                 let { winnerSum } = winnerResult;
+//                 winnerSum /= teamSize;
+
+//                 //losers
+//                 var query = `select sum(aram_rating) as loserSum from players where id in (${losers});`;
+//                 let [loserResult] = await conn.query(query);
+//                 let { loserSum } = loserResult;
+//                 loserSum /= teamSize;
+
+//                 const k = 40;
+//                 const diff = 1000;
+
+//                 const probability1 = (1 / (1 + Math.pow(10, (loserSum - winnerSum) / diff)));
+//                 const probability2 = (1 / (1 + Math.pow(10, (winnerSum - loserSum) / diff)));
+//                 const winnerRating = k * (1 - probability1);
+//                 const loserRating = k * (0 - probability2);
+
+//                 var query = `update players set aram_rating=aram_rating+${winnerRating} where id in (${winners});`;
+//                 await conn.query(query);
+//                 var query = `update players set aram_rating=aram_rating+${loserRating} where id in (${losers});`;
+//                 await conn.query(query);
+//                 var query = `update games set winner_rating=${winnerRating},loser_rating=${loserRating} where id = ${i};`;
+//                 await conn.query(query);
+//             }
+//         }
+//         res.sendStatus(200);
+//     } catch (err) {
+//         throw err;
+//     } finally {
+//         if (conn) return conn.release();
+//     }
+
+// });
 
 app.listen(port, () => {
     console.log(`Randomizer-api listening at http://localhost:${port}`);
