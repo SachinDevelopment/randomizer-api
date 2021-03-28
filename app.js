@@ -44,36 +44,36 @@ app.get('/player/:id/stats', async (req, res) => {
         var playerquery = `select * from players where id = ${id};`;
         var [player] = await conn.query(playerquery);
 
-        query = `select count(*) as count from games where (red rlike "${id}-Jungle-[a-zA-z]+-${name}-${id}" or blue rlike "${id}-Jungle-[a-zA-z]+-${name}-${id}") and map="Summoner's Rift" and date > "2021-03-25" ;`;
+        query = `select count(*) as count from games where (red rlike "${id}-Jungle-[^,]+-${name}-${id}" or blue rlike "${id}-Jungle-[^,]+-${name}-${id}") and map="Summoner's Rift" and date > "2021-03-25" ;`;
         var [srJungle] = await conn.query(query);
 
-        query = `select count(*) as count from games where (red rlike "${id}-Lane-[a-zA-z]+-${name}-${id}" or blue rlike "${id}-Lane-[a-zA-z]+-${name}-${id}") and map="Summoner's Rift" and date > "2021-03-25" ;`;
+        query = `select count(*) as count from games where (red rlike "${id}-Lane-[^,]+-${name}-${id}" or blue rlike "${id}-Lane-[^,]+-${name}-${id}") and map="Summoner's Rift" and date > "2021-03-25" ;`;
         var [srLane] = await conn.query(query);
 
-        query = `select count(*) as count from games where (red rlike "${id}-Fill-[a-zA-z]+-${name}-${id}" or blue rlike "${id}-Fill-[a-zA-z]+-${name}-${id}") and map="Summoner's Rift" and date > "2021-03-25";`;
+        query = `select count(*) as count from games where (red rlike "${id}-Fill-[^,]+-${name}-${id}" or blue rlike "${id}-Fill-[^,]+-${name}-${id}") and map="Summoner's Rift" and date > "2021-03-25";`;
         var [srFill] = await conn.query(query);
 
-        query = `select count(*) as count from games where (red rlike "${id}-Fill-[a-zA-z]+-${name}-${id}" or blue rlike "${id}-Fill-[a-zA-z]+-${name}-${id}") and map="Howling Abyss" and date > "2021-03-25";`;
+        query = `select count(*) as count from games where (red rlike "${id}-Fill-[^,]+-${name}-${id}" or blue rlike "${id}-Fill-[^,]+-${name}-${id}") and map="Howling Abyss" and date > "2021-03-25";`;
         var [haFill] = await conn.query(query);
 
-        query = `select count(*) as count from games where ((red rlike "${id}-Lane-[a-zA-z]+-${name}-${id}" and winning_side="red") or (blue rlike "${id}-Lane-[a-zA-z]+-${name}-${id}" and winning_side="blue")) and map="Summoner's Rift" and date > "2021-03-25";`;
+        query = `select count(*) as count from games where ((red rlike "${id}-Lane-[^,]+-${name}-${id}" and winning_side="red") or (blue rlike "${id}-Lane-[^,]+-${name}-${id}" and winning_side="blue")) and map="Summoner's Rift" and date > "2021-03-25";`;
         var [laneWins] = await conn.query(query);
         const laneWR = srLane.count ? Number(laneWins.count / srLane.count * 100).toFixed(0) : 0;
 
-        query = `select count(*) as count from games where ((red rlike "${id}-Jungle-[a-zA-z]+-${name}-${id}" and winning_side="red") or (blue rlike "${id}-Jungle-[a-zA-z]+-${name}-${id}" and winning_side="blue")) and map="Summoner's Rift" and date > "2021-03-25";`;
+        query = `select count(*) as count from games where ((red rlike "${id}-Jungle-[^,]+-${name}-${id}" and winning_side="red") or (blue rlike "${id}-Jungle-[^,]+-${name}-${id}" and winning_side="blue")) and map="Summoner's Rift" and date > "2021-03-25";`;
         console.log('a', query);
         var [jungleWins] = await conn.query(query);
         const jungleWR = srJungle.count ? Number(jungleWins.count / srJungle.count * 100).toFixed(0) : 0;
 
-        let srChampsQuery = `select blue,red from games where (red rlike "${id}-[a-zA-z]+-[a-zA-z]+-${name}-${id}" or blue rlike "${id}-[a-zA-z]+-[a-zA-z]+${name}-${id}") and map="Summoner's Rift" and date > "2021-03-25";`;
+        let srChampsQuery = `select blue,red from games where (red rlike "${id}-[^,]+-[^,]+-${name}-${id}" or blue rlike "${id}-[^,]+-[^,]+-${name}-${id}") and map="Summoner's Rift" and date > "2021-03-25";`;
         var srChamps = await conn.query(srChampsQuery);
-
+        console.log('srChampsQuery',srChampsQuery);
         srChamps = srChamps.slice(0, srChamps.length);
         srChamps = srChamps.map((c) => c.red.match(`${id}.*-(.*)-${name}-${id}`) || c.blue.match(`${id}.*-(.*)-${name}-${id}`));
         srChamps = srChamps.map(c => c[1]);
         srChamps = [...new Set(srChamps)];
 
-        let haChampsQuery = `select blue,red from games where (red rlike "${id}-[a-zA-z]+-[a-zA-z]+-${name}-${id}" or blue rlike "${id}-[a-zA-z]+-[a-zA-z]+-${name}-${id}") and map="Howling Abyss" and date > "2021-03-25";`;
+        let haChampsQuery = `select blue,red from games where (red rlike "${id}-[^,]+-[^,]+-${name}-${id}" or blue rlike "${id}-[^,]+-[^,]+-${name}-${id}") and map="Howling Abyss" and date > "2021-03-25";`;
         var haChamps = await conn.query(haChampsQuery);
 
         haChamps = haChamps.slice(0, haChamps.length);
@@ -82,9 +82,9 @@ app.get('/player/:id/stats', async (req, res) => {
         haChamps = [...new Set(haChamps)];
         const func = () => {
             const promises = srChamps.map(async (champ) => {
-                let query = `select count(*) as count from games where ((red rlike "${id}-[a-zA-z]+-${champ}-${name}-${id}" and winning_side="red") or (blue rlike "${id}-[a-zA-z]+-${champ}-${name}-${id}" and winning_side="blue")) and map="Summoner's Rift" and date > "2021-03-25";`;
+                let query = `select count(*) as count from games where ((red rlike "${id}-[^,]+-${champ}-${name}-${id}" and winning_side="red") or (blue rlike "${id}-[^,]+-${champ}-${name}-${id}" and winning_side="blue")) and map="Summoner's Rift" and date > "2021-03-25";`;
                 const wins = await conn.query(query);
-                query = `select count(*) as count from games where ((red rlike "${id}-[a-zA-z]+-${champ}-${name}-${id}" and winning_side="blue") or (blue rlike "${id}-[a-zA-z]+-${champ}-${name}-${id}" and winning_side="red")) and map="Summoner's Rift" and date > "2021-03-25";`;
+                query = `select count(*) as count from games where ((red rlike "${id}-[^,]+-${champ}-${name}-${id}" and winning_side="blue") or (blue rlike "${id}-[^,]+-${champ}-${name}-${id}" and winning_side="red")) and map="Summoner's Rift" and date > "2021-03-25";`;
                 const loses = await conn.query(query);
                 return { name: champ, count: wins[0].count + loses[0].count, wins: wins[0].count, loses: loses[0].count, };
             })
@@ -94,9 +94,9 @@ app.get('/player/:id/stats', async (req, res) => {
 
         const func2 = () => {
             const promises = haChamps.map(async (champ) => {
-                let query = `select count(*) as count from games where ((red rlike "${id}-[a-zA-z]+-${champ}-${name}-${id}" and winning_side="red") or (blue rlike "${id}-[a-zA-z]+-${champ}-${name}-${id}" and winning_side="blue")) and map="Howling Abyss" and date > "2021-03-25";`;
+                let query = `select count(*) as count from games where ((red rlike "${id}-[^,]+-${champ}-${name}-${id}" and winning_side="red") or (blue rlike "${id}-[^,]+-${champ}-${name}-${id}" and winning_side="blue")) and map="Howling Abyss" and date > "2021-03-25";`;
                 const wins = await conn.query(query);
-                query = `select count(*) as count from games where ((red rlike "${id}-[a-zA-z]+-${champ}-${name}-${id}" and winning_side="blue") or (blue rlike "${id}-[a-zA-z]+-${champ}-${name}-${id}" and winning_side="red")) and map="Howling Abyss" and date > "2021-03-25";`;
+                query = `select count(*) as count from games where ((red rlike "${id}-[^,]+-${champ}-${name}-${id}" and winning_side="blue") or (blue rlike "${id}-[^,]+-${champ}-${name}-${id}" and winning_side="red")) and map="Howling Abyss" and date > "2021-03-25";`;
                 const loses = await conn.query(query);
                 return { name: champ, count: wins[0].count + loses[0].count, wins: wins[0].count, loses: loses[0].count };
             })
@@ -146,10 +146,10 @@ app.get('/player/:id/map/:map/games', async (req, res) => {
         var query = `select name from players where id = ${id};`;
         var [nameResult] = await conn.query(query);
         var { name } = nameResult;
-        var query = `select * from games where (red rlike "${id}-[a-zA-z]+-[a-zA-z]+-${name}-${id}" or blue rlike "${id}-[a-zA-z]+-[a-zA-z]+-${name}-${id}") and date > "2021-03-25" and  map="${mapF}" order by id desc limit ${limit || 1000} offset ${page * limit - limit || 0};`;
+        var query = `select * from games where (red rlike "${id}-[^,]+-[^,]+-${name}-${id}" or blue rlike "${id}-[^,]+-[^,]+-${name}-${id}") and date > "2021-03-25" and  map="${mapF}" order by id desc limit ${limit || 1000} offset ${page * limit - limit || 0};`;
         var rows = await conn.query(query);
 
-        var query = `select count(*) as count from games where (red rlike "${id}-[a-zA-z]+-[a-zA-z]+-${name}-${id}" or blue rlike "${id}-[a-zA-z]+-[a-zA-z]+-${name}-${id}") and date > "2021-03-25" and map="${mapF}";`;
+        var query = `select count(*) as count from games where (red rlike "${id}-[^,]+-[^,]+-${name}-${id}" or blue rlike "${id}-[^,]+-[^,]+-${name}-${id}") and date > "2021-03-25" and map="${mapF}";`;
         var total = await conn.query(query);
 
 
