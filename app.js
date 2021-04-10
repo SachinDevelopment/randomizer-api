@@ -9,6 +9,11 @@ const pool = require('./db')
 const k = 50;
 const diff = 800;
 
+// Season info
+const currentSeason = 2;
+const previousSeason = currentSeason - 1;
+const seasonStartDate = "2021-03-25";
+
 app.use(bodyParser.json());
 app.use(cors());
 
@@ -18,7 +23,7 @@ app.get('/players', async (req, res) => {
         // establish a connection to MariaDB
         conn = await pool.getConnection();
         // create a new query
-        var query = "select * from players";
+        var query = `select p.*,prev.rating as prev_rating,prev.aram_rating as prev_aram_rating from players p left join players_season_${previousSeason} prev on p.id=prev.id`;
         // execute the query and set the result to a new variable
         var rows = await conn.query(query);
         // return the results
@@ -44,28 +49,28 @@ app.get('/player/:id/stats', async (req, res) => {
         var playerquery = `select * from players where id = ${id};`;
         var [player] = await conn.query(playerquery);
 
-        query = `select count(*) as count from games where (red rlike "${id}-Jungle-[^,]+-${name}-${id}" or blue rlike "${id}-Jungle-[^,]+-${name}-${id}") and map="Summoner's Rift" and date > "2021-03-25" ;`;
+        query = `select count(*) as count from games where (red rlike "${id}-Jungle-[^,]+-${name}-${id}" or blue rlike "${id}-Jungle-[^,]+-${name}-${id}") and map="Summoner's Rift" and date > "${seasonStartDate}" ;`;
         var [srJungle] = await conn.query(query);
 
-        query = `select count(*) as count from games where (red rlike "${id}-Lane-[^,]+-${name}-${id}" or blue rlike "${id}-Lane-[^,]+-${name}-${id}") and map="Summoner's Rift" and date > "2021-03-25" ;`;
+        query = `select count(*) as count from games where (red rlike "${id}-Lane-[^,]+-${name}-${id}" or blue rlike "${id}-Lane-[^,]+-${name}-${id}") and map="Summoner's Rift" and date > "${seasonStartDate}" ;`;
         var [srLane] = await conn.query(query);
 
-        query = `select count(*) as count from games where (red rlike "${id}-Fill-[^,]+-${name}-${id}" or blue rlike "${id}-Fill-[^,]+-${name}-${id}") and map="Summoner's Rift" and date > "2021-03-25";`;
+        query = `select count(*) as count from games where (red rlike "${id}-Fill-[^,]+-${name}-${id}" or blue rlike "${id}-Fill-[^,]+-${name}-${id}") and map="Summoner's Rift" and date > "${seasonStartDate}";`;
         var [srFill] = await conn.query(query);
 
-        query = `select count(*) as count from games where (red rlike "${id}-Fill-[^,]+-${name}-${id}" or blue rlike "${id}-Fill-[^,]+-${name}-${id}") and map="Howling Abyss" and date > "2021-03-25";`;
+        query = `select count(*) as count from games where (red rlike "${id}-Fill-[^,]+-${name}-${id}" or blue rlike "${id}-Fill-[^,]+-${name}-${id}") and map="Howling Abyss" and date > "${seasonStartDate}";`;
         var [haFill] = await conn.query(query);
 
-        query = `select count(*) as count from games where ((red rlike "${id}-Lane-[^,]+-${name}-${id}" and winning_side="red") or (blue rlike "${id}-Lane-[^,]+-${name}-${id}" and winning_side="blue")) and map="Summoner's Rift" and date > "2021-03-25";`;
+        query = `select count(*) as count from games where ((red rlike "${id}-Lane-[^,]+-${name}-${id}" and winning_side="red") or (blue rlike "${id}-Lane-[^,]+-${name}-${id}" and winning_side="blue")) and map="Summoner's Rift" and date > "${seasonStartDate}";`;
         var [laneWins] = await conn.query(query);
         const laneWR = srLane.count ? Number(laneWins.count / srLane.count * 100).toFixed(0) : 0;
 
-        query = `select count(*) as count from games where ((red rlike "${id}-Jungle-[^,]+-${name}-${id}" and winning_side="red") or (blue rlike "${id}-Jungle-[^,]+-${name}-${id}" and winning_side="blue")) and map="Summoner's Rift" and date > "2021-03-25";`;
+        query = `select count(*) as count from games where ((red rlike "${id}-Jungle-[^,]+-${name}-${id}" and winning_side="red") or (blue rlike "${id}-Jungle-[^,]+-${name}-${id}" and winning_side="blue")) and map="Summoner's Rift" and date > "${seasonStartDate}";`;
         console.log('a', query);
         var [jungleWins] = await conn.query(query);
         const jungleWR = srJungle.count ? Number(jungleWins.count / srJungle.count * 100).toFixed(0) : 0;
 
-        let srChampsQuery = `select blue,red from games where (red rlike "${id}-[^,]+-[^,]+-${name}-${id}" or blue rlike "${id}-[^,]+-[^,]+-${name}-${id}") and map="Summoner's Rift" and date > "2021-03-25";`;
+        let srChampsQuery = `select blue,red from games where (red rlike "${id}-[^,]+-[^,]+-${name}-${id}" or blue rlike "${id}-[^,]+-[^,]+-${name}-${id}") and map="Summoner's Rift" and date > "${seasonStartDate}";`;
         var srChamps = await conn.query(srChampsQuery);
         console.log('srChampsQuery',srChampsQuery);
         srChamps = srChamps.slice(0, srChamps.length);
@@ -73,7 +78,7 @@ app.get('/player/:id/stats', async (req, res) => {
         srChamps = srChamps.map(c => c[1]);
         srChamps = [...new Set(srChamps)];
 
-        let haChampsQuery = `select blue,red from games where (red rlike "${id}-[^,]+-[^,]+-${name}-${id}" or blue rlike "${id}-[^,]+-[^,]+-${name}-${id}") and map="Howling Abyss" and date > "2021-03-25";`;
+        let haChampsQuery = `select blue,red from games where (red rlike "${id}-[^,]+-[^,]+-${name}-${id}" or blue rlike "${id}-[^,]+-[^,]+-${name}-${id}") and map="Howling Abyss" and date > "${seasonStartDate}";`;
         var haChamps = await conn.query(haChampsQuery);
 
         haChamps = haChamps.slice(0, haChamps.length);
@@ -82,9 +87,9 @@ app.get('/player/:id/stats', async (req, res) => {
         haChamps = [...new Set(haChamps)];
         const func = () => {
             const promises = srChamps.map(async (champ) => {
-                let query = `select count(*) as count from games where ((red rlike "${id}-[^,]+-${champ}-${name}-${id}" and winning_side="red") or (blue rlike "${id}-[^,]+-${champ}-${name}-${id}" and winning_side="blue")) and map="Summoner's Rift" and date > "2021-03-25";`;
+                let query = `select count(*) as count from games where ((red rlike "${id}-[^,]+-${champ}-${name}-${id}" and winning_side="red") or (blue rlike "${id}-[^,]+-${champ}-${name}-${id}" and winning_side="blue")) and map="Summoner's Rift" and date > "${seasonStartDate}";`;
                 const wins = await conn.query(query);
-                query = `select count(*) as count from games where ((red rlike "${id}-[^,]+-${champ}-${name}-${id}" and winning_side="blue") or (blue rlike "${id}-[^,]+-${champ}-${name}-${id}" and winning_side="red")) and map="Summoner's Rift" and date > "2021-03-25";`;
+                query = `select count(*) as count from games where ((red rlike "${id}-[^,]+-${champ}-${name}-${id}" and winning_side="blue") or (blue rlike "${id}-[^,]+-${champ}-${name}-${id}" and winning_side="red")) and map="Summoner's Rift" and date > "${seasonStartDate}";`;
                 const loses = await conn.query(query);
                 return { name: champ, count: wins[0].count + loses[0].count, wins: wins[0].count, loses: loses[0].count, };
             })
@@ -94,9 +99,9 @@ app.get('/player/:id/stats', async (req, res) => {
 
         const func2 = () => {
             const promises = haChamps.map(async (champ) => {
-                let query = `select count(*) as count from games where ((red rlike "${id}-[^,]+-${champ}-${name}-${id}" and winning_side="red") or (blue rlike "${id}-[^,]+-${champ}-${name}-${id}" and winning_side="blue")) and map="Howling Abyss" and date > "2021-03-25";`;
+                let query = `select count(*) as count from games where ((red rlike "${id}-[^,]+-${champ}-${name}-${id}" and winning_side="red") or (blue rlike "${id}-[^,]+-${champ}-${name}-${id}" and winning_side="blue")) and map="Howling Abyss" and date > "${seasonStartDate}";`;
                 const wins = await conn.query(query);
-                query = `select count(*) as count from games where ((red rlike "${id}-[^,]+-${champ}-${name}-${id}" and winning_side="blue") or (blue rlike "${id}-[^,]+-${champ}-${name}-${id}" and winning_side="red")) and map="Howling Abyss" and date > "2021-03-25";`;
+                query = `select count(*) as count from games where ((red rlike "${id}-[^,]+-${champ}-${name}-${id}" and winning_side="blue") or (blue rlike "${id}-[^,]+-${champ}-${name}-${id}" and winning_side="red")) and map="Howling Abyss" and date > "${seasonStartDate}";`;
                 const loses = await conn.query(query);
                 return { name: champ, count: wins[0].count + loses[0].count, wins: wins[0].count, loses: loses[0].count };
             })
@@ -146,10 +151,10 @@ app.get('/player/:id/map/:map/games', async (req, res) => {
         var query = `select name from players where id = ${id};`;
         var [nameResult] = await conn.query(query);
         var { name } = nameResult;
-        var query = `select * from games where (red rlike "${id}-[^,]+-[^,]+-${name}-${id}" or blue rlike "${id}-[^,]+-[^,]+-${name}-${id}") and date > "2021-03-25" and  map="${mapF}" order by id desc limit ${limit || 1000} offset ${page * limit - limit || 0};`;
+        var query = `select * from games where (red rlike "${id}-[^,]+-[^,]+-${name}-${id}" or blue rlike "${id}-[^,]+-[^,]+-${name}-${id}") and date > "${seasonStartDate}" and  map="${mapF}" order by id desc limit ${limit || 1000} offset ${page * limit - limit || 0};`;
         var rows = await conn.query(query);
 
-        var query = `select count(*) as count from games where (red rlike "${id}-[^,]+-[^,]+-${name}-${id}" or blue rlike "${id}-[^,]+-[^,]+-${name}-${id}") and date > "2021-03-25" and map="${mapF}";`;
+        var query = `select count(*) as count from games where (red rlike "${id}-[^,]+-[^,]+-${name}-${id}" or blue rlike "${id}-[^,]+-[^,]+-${name}-${id}") and date > "${seasonStartDate}" and map="${mapF}";`;
         var total = await conn.query(query);
 
 
@@ -208,13 +213,13 @@ app.get('/stats/:id', async (req, res) => {
         const others = await conn.query(query);
         const func = () => {
             const promises = others.map(async (player) => {
-                query = `SELECT count(*) as count from (SELECT * FROM games WHERE winners LIKE "%${me[0].name}-${me[0].id}%") AS sub WHERE winners LIKE "%${player.name}-${player.id}%" and map="Summoner's Rift";`;
+                query = `SELECT count(*) as count from (SELECT * FROM games WHERE winners LIKE "%${me[0].name}-${me[0].id}%" and date > "${seasonStartDate}") AS sub WHERE winners LIKE "%${player.name}-${player.id}%" and map="Summoner's Rift";`;
                 const teamWinCount = await conn.query(query);
-                query = `SELECT count(*) as count from (SELECT * FROM games WHERE losers LIKE "%${me[0].name}-${me[0].id}%") AS sub WHERE losers LIKE "%${player.name}-${player.id}%" and map="Summoner's Rift";`;
+                query = `SELECT count(*) as count from (SELECT * FROM games WHERE losers LIKE "%${me[0].name}-${me[0].id}%" and date > "${seasonStartDate}") AS sub WHERE losers LIKE "%${player.name}-${player.id}%" and map="Summoner's Rift";`;
                 const teamLoseCount = await conn.query(query);
-                query = `SELECT count(*) as count from (SELECT * FROM games WHERE winners LIKE "%${me[0].name}-${me[0].id}%") AS sub WHERE losers LIKE "%${player.name}-${player.id}%" and map="Summoner's Rift";`;
+                query = `SELECT count(*) as count from (SELECT * FROM games WHERE winners LIKE "%${me[0].name}-${me[0].id}%" and date > "${seasonStartDate}") AS sub WHERE losers LIKE "%${player.name}-${player.id}%" and map="Summoner's Rift";`;
                 const enemyWinCount = await conn.query(query);
-                query = `SELECT count(*) as count from (SELECT * FROM games WHERE losers LIKE "%${me[0].name}-${me[0].id}%") AS sub WHERE winners LIKE "%${player.name}-${player.id}%" and map="Summoner's Rift";`;
+                query = `SELECT count(*) as count from (SELECT * FROM games WHERE losers LIKE "%${me[0].name}-${me[0].id}%" and date > "${seasonStartDate}") AS sub WHERE winners LIKE "%${player.name}-${player.id}%" and map="Summoner's Rift";`;
                 const enemyLoseCount = await conn.query(query);
                 return { player: player.name, teamWins: teamWinCount[0].count, teamLoses: teamLoseCount[0].count, enemyWins: enemyWinCount[0].count, enemyLoses: enemyLoseCount[0].count };
             });
