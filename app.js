@@ -147,16 +147,27 @@ app.get("/player/:id/stats", async (req, res) => {
 
     const srChampWrArr = await func();
 
+    const prevRatings = [];
+    for (i = 1; i <= previousSeason; i++) {
+      let query = `select rating from players_season_${i} where id = ${id}`;
+      const [rating] = await conn.query(query);
+      console.log(rating);
+      prevRatings.push({ season: i, ...rating });
+    }
+
+    var query = `select rating as lastSeasonRating from players_season_${previousSeason} where id = ${id}`;
+    var [lastSeasonRating] = await conn.query(query);
+
     res.send({
       ...player,
-      sr: {
-        lane: srLane.count,
-        laneWR,
-        jungle: srJungle.count,
-        jungleWR,
-        fill: srFill.count,
-        champs: srChampWrArr,
-      },
+      ...lastSeasonRating,
+      lane: srLane.count,
+      laneWR,
+      jungle: srJungle.count,
+      jungleWR,
+      fill: srFill.count,
+      champs: srChampWrArr,
+      prevRatings,
     });
   } catch (err) {
     throw err;
