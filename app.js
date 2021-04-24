@@ -374,7 +374,6 @@ app.post("/games", async (req, res) => {
     var query = `UPDATE players SET winrate=Round(wins/(loses+wins)*100,0) WHERE loses+wins != 0;`;
     await conn.query(query);
 
-    // NEW
     var query = `select sum(rating) as winnerSum from players where id in (${winnerIds});`;
     let [winnerResult] = await conn.query(query);
     let { winnerSum } = winnerResult;
