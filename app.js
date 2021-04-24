@@ -470,7 +470,7 @@ app.post("/player", async (req, res) => {
   let conn;
   try {
     conn = await pool.getConnection();
-    var query = `insert into players (name,wins,loses,winrate,aram_wins,aram_loses,aram_winrate,rating,aram_rating) values ("${name}",0,0,0,0,0,0,1500,1500);`;
+    var query = `insert into players (name,wins,loses,winrate,rating) values ("${name}",0,0,0,1500);`;
     var result = await conn.query(query);
 
     res.sendStatus(200);
