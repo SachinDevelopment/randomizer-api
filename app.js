@@ -365,75 +365,37 @@ app.post("/games", async (req, res) => {
   let conn;
   try {
     conn = await pool.getConnection();
-    if (map === "Howling Abyss") {
-      var query = `UPDATE players SET aram_wins=aram_wins+1 WHERE id in (${winnerIds});`;
-      await conn.query(query);
+    var query = `UPDATE players SET wins=wins+1 WHERE id in (${winnerIds});`;
+    await conn.query(query);
 
-      var query = `UPDATE players SET aram_loses=aram_loses+1 WHERE id in (${loserIds});`;
-      await conn.query(query);
+    var query = `UPDATE players SET loses=loses+1 WHERE id in (${loserIds});`;
+    await conn.query(query);
 
-      var query = `UPDATE players SET aram_winrate=Round(aram_wins/(aram_loses+aram_wins)*100,0) WHERE aram_loses+aram_wins != 0;`;
-      await conn.query(query);
+    var query = `UPDATE players SET winrate=Round(wins/(loses+wins)*100,0) WHERE loses+wins != 0;`;
+    await conn.query(query);
 
-      // NEW
-      var query = `select sum(aram_rating) as winnerSum from players where id in (${winnerIds});`;
-      let [winnerResult] = await conn.query(query);
-      let { winnerSum } = winnerResult;
-      winnerSum /= game_size;
+    // NEW
+    var query = `select sum(rating) as winnerSum from players where id in (${winnerIds});`;
+    let [winnerResult] = await conn.query(query);
+    let { winnerSum } = winnerResult;
+    winnerSum /= game_size;
 
-      var query = `select sum(aram_rating) as loserSum from players where id in (${loserIds});`;
-      let [loserResult] = await conn.query(query);
-      let { loserSum } = loserResult;
-      loserSum /= game_size;
+    var query = `select sum(rating) as loserSum from players where id in (${loserIds});`;
+    let [loserResult] = await conn.query(query);
+    let { loserSum } = loserResult;
+    loserSum /= game_size;
 
-      const probability1 =
-        1 / (1 + Math.pow(10, (loserSum - winnerSum) / diff));
-      const probability2 =
-        1 / (1 + Math.pow(10, (winnerSum - loserSum) / diff));
-      const winnerRating = k * (1 - probability1);
-      const loserRating = k * (0 - probability2);
+    const probability1 = 1 / (1 + Math.pow(10, (loserSum - winnerSum) / diff));
+    const probability2 = 1 / (1 + Math.pow(10, (winnerSum - loserSum) / diff));
+    const winnerRating = k * (1 - probability1);
+    const loserRating = k * (0 - probability2);
 
-      var query = `update players set aram_rating=aram_rating+${winnerRating} where id in (${winnerIds});`;
-      await conn.query(query);
-      var query = `update players set aram_rating=aram_rating+${loserRating} where id in (${loserIds});`;
-      await conn.query(query);
-      var query = `INSERT INTO games (game_size, winning_side, winners, losers, blue, red, date, map, winner_rating, loser_rating) VALUES (${game_size}, "${winning_side}", "${winners}", "${losers}",  "${blue}", "${red}", "${date}", "${map}",${winnerRating},${loserRating});`;
-      await conn.query(query);
-    } else {
-      var query = `UPDATE players SET wins=wins+1 WHERE id in (${winnerIds});`;
-      await conn.query(query);
-
-      var query = `UPDATE players SET loses=loses+1 WHERE id in (${loserIds});`;
-      await conn.query(query);
-
-      var query = `UPDATE players SET winrate=Round(wins/(loses+wins)*100,0) WHERE loses+wins != 0;`;
-      await conn.query(query);
-
-      // NEW
-      var query = `select sum(rating) as winnerSum from players where id in (${winnerIds});`;
-      let [winnerResult] = await conn.query(query);
-      let { winnerSum } = winnerResult;
-      winnerSum /= game_size;
-
-      var query = `select sum(rating) as loserSum from players where id in (${loserIds});`;
-      let [loserResult] = await conn.query(query);
-      let { loserSum } = loserResult;
-      loserSum /= game_size;
-
-      const probability1 =
-        1 / (1 + Math.pow(10, (loserSum - winnerSum) / diff));
-      const probability2 =
-        1 / (1 + Math.pow(10, (winnerSum - loserSum) / diff));
-      const winnerRating = k * (1 - probability1);
-      const loserRating = k * (0 - probability2);
-
-      var query = `update players set rating=rating+${winnerRating} where id in (${winnerIds});`;
-      await conn.query(query);
-      var query = `update players set rating=rating+${loserRating} where id in (${loserIds});`;
-      await conn.query(query);
-      var query = `INSERT INTO games (game_size, winning_side, winners, losers, blue, red, date, map, winner_rating, loser_rating) VALUES (${game_size}, "${winning_side}", "${winners}", "${losers}",  "${blue}", "${red}", "${date}", "${map}",${winnerRating},${loserRating});`;
-      await conn.query(query);
-    }
+    var query = `update players set rating=rating+${winnerRating} where id in (${winnerIds});`;
+    await conn.query(query);
+    var query = `update players set rating=rating+${loserRating} where id in (${loserIds});`;
+    await conn.query(query);
+    var query = `INSERT INTO games (game_size, winning_side, winners, losers, blue, red, date, map, winner_rating, loser_rating) VALUES (${game_size}, "${winning_side}", "${winners}", "${losers}",  "${blue}", "${red}", "${date}", "${map}",${winnerRating},${loserRating});`;
+    await conn.query(query);
 
     res.sendStatus(200);
   } catch (err) {
