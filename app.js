@@ -7,12 +7,14 @@ const pool = require("./db");
 
 // ratings constants
 const k = 50;
-const diff = 800;
+const diff = 1200;
 
 // Season info
-const currentSeason = 2;
+const currentSeason = 3;
 const previousSeason = currentSeason - 1;
-const seasonStartDate = "2021-03-25";
+//const season1StartDate = "2021-03-06"
+//const season2StartDate = "2021-03-25";
+const seasonStartDate = "2021-05-31";
 
 app.use(bodyParser.json());
 app.use(cors());
@@ -23,8 +25,7 @@ app.get("/players", async (req, res) => {
     // establish a connection to MariaDB
     conn = await pool.getConnection();
     // create a new query
-    var query = `select p.*,prev.rating as prev_rating,prev.aram_rating as prev_aram_rating from players p left join players_season_${previousSeason} prev on p.id=prev.id`;
-
+    var query = `select p.*,prev.rating as prev_rating from players p left join players_season_${previousSeason} prev on p.id=prev.id`;
     const func = (id, name, allChamps) => {
       const promises = allChamps.map(async (champ) => {
         let query = `select count(*) as count from games where ((red rlike "${id}-[^,]+-${champ}-${name}-${id}" and winning_side="red") or (blue rlike "${id}-[^,]+-${champ}-${name}-${id}" and winning_side="blue")) and map="Summoner's Rift" and date > "${seasonStartDate}";`;
@@ -43,12 +44,10 @@ app.get("/players", async (req, res) => {
     };
     // execute the query and set the result to a new variable
     var rows = await conn.query(query);
-
     const func2 = () => {
       rows = rows.map(async (player) => {
         let srChampsQuery = `select blue,red from games where (red rlike "${player.id}-[^,]+-[^,]+-${player.name}-${player.id}" or blue rlike "${player.id}-[^,]+-[^,]+-${player.name}-${player.id}") and map="Summoner's Rift" and date > "${seasonStartDate}";`;
         var srChamps = await conn.query(srChampsQuery);
-        console.log("srChampsQuery", srChampsQuery);
         srChamps = srChamps.slice(0, srChamps.length);
         srChamps = srChamps.map(
           (c) =>
@@ -62,7 +61,7 @@ app.get("/players", async (req, res) => {
         return {
           ...player,
           fav_champs: srChampWrArr
-            .sort((a, b) => b.count - a.count)
+            .sort((a, b) => b.count - a.count || b.wins - a.wins)
             .splice(0, 5),
         };
       });
@@ -71,6 +70,21 @@ app.get("/players", async (req, res) => {
 
     const playerData = await func2();
     res.send(playerData);
+  } catch (err) {
+    throw err;
+  } finally {
+    if (conn) return conn.release();
+  }
+});
+
+app.get("/players/fast", async (req, res) => {
+  let conn;
+  try {
+    // establish a connection to MariaDB
+    conn = await pool.getConnection();
+    // create a new query
+    var query = `select * from players_season_2`;
+    res.send(await conn.query(query));
   } catch (err) {
     throw err;
   } finally {
@@ -110,7 +124,6 @@ app.get("/player/:id/stats", async (req, res) => {
       : 0;
 
     query = `select count(*) as count from games where ((red rlike "${id}-Jungle-[^,]+-${name}-${id}" and winning_side="red") or (blue rlike "${id}-Jungle-[^,]+-${name}-${id}" and winning_side="blue")) and map="Summoner's Rift" and date > "${seasonStartDate}";`;
-    console.log("a", query);
     var [jungleWins] = await conn.query(query);
     const jungleWR = srJungle.count
       ? Number((jungleWins.count / srJungle.count) * 100).toFixed(0)
@@ -118,7 +131,6 @@ app.get("/player/:id/stats", async (req, res) => {
 
     let srChampsQuery = `select blue,red from games where (red rlike "${id}-[^,]+-[^,]+-${name}-${id}" or blue rlike "${id}-[^,]+-[^,]+-${name}-${id}") and map="Summoner's Rift" and date > "${seasonStartDate}";`;
     var srChamps = await conn.query(srChampsQuery);
-    console.log("srChampsQuery", srChampsQuery);
     srChamps = srChamps.slice(0, srChamps.length);
     srChamps = srChamps.map(
       (c) =>
@@ -151,8 +163,9 @@ app.get("/player/:id/stats", async (req, res) => {
     for (i = 1; i <= previousSeason; i++) {
       let query = `select rating from players_season_${i} where id = ${id}`;
       const [rating] = await conn.query(query);
-      console.log(rating);
-      prevRatings.push({ season: i, ...rating });
+      query = `SELECT a.rank FROM (SELECT *, RANK() OVER (ORDER BY rating DESC) AS rank from players_season_${i} where wins + loses >= 10) a WHERE a.id = ${id};`;
+      const [rank] = await conn.query(query);
+      prevRatings.push({ season: i, ...rating, ...rank });
     }
 
     var query = `select rating as lastSeasonRating from players_season_${previousSeason} where id = ${id}`;
