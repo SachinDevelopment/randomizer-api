@@ -6,8 +6,9 @@ const cors = require("cors");
 const pool = require("./db");
 
 // ratings constants
-const k = 50;
+const k = 40;
 const diff = 1200;
+const inflationRate = 1.25;
 
 // Season info
 const currentSeason = 3;
@@ -114,9 +115,6 @@ app.get("/player/:id/stats", async (req, res) => {
     query = `select count(*) as count from games where (red rlike "${id}-Fill-[^,]+-${name}-${id}" or blue rlike "${id}-Fill-[^,]+-${name}-${id}") and map="Summoner's Rift" and date > "${seasonStartDate}";`;
     var [srFill] = await conn.query(query);
 
-    query = `select count(*) as count from games where (red rlike "${id}-Fill-[^,]+-${name}-${id}" or blue rlike "${id}-Fill-[^,]+-${name}-${id}") and map="Howling Abyss" and date > "${seasonStartDate}";`;
-    var [haFill] = await conn.query(query);
-
     query = `select count(*) as count from games where ((red rlike "${id}-Lane-[^,]+-${name}-${id}" and winning_side="red") or (blue rlike "${id}-Lane-[^,]+-${name}-${id}" and winning_side="blue")) and map="Summoner's Rift" and date > "${seasonStartDate}";`;
     var [laneWins] = await conn.query(query);
     const laneWR = srLane.count
@@ -132,11 +130,13 @@ app.get("/player/:id/stats", async (req, res) => {
     let srChampsQuery = `select blue,red from games where (red rlike "${id}-[^,]+-[^,]+-${name}-${id}" or blue rlike "${id}-[^,]+-[^,]+-${name}-${id}") and map="Summoner's Rift" and date > "${seasonStartDate}";`;
     var srChamps = await conn.query(srChampsQuery);
     srChamps = srChamps.slice(0, srChamps.length);
+    console.log("test", srChamps);
     srChamps = srChamps.map(
       (c) =>
         c.red.match(`${id}.*-(.*)-${name}-${id}`) ||
         c.blue.match(`${id}.*-(.*)-${name}-${id}`)
     );
+    console.log("test", srChamps);
     srChamps = srChamps.map((c) => c[1]);
     srChamps = [...new Set(srChamps)];
 
@@ -189,6 +189,51 @@ app.get("/player/:id/stats", async (req, res) => {
   }
 });
 
+app.get("/champs", async (req, res) => {
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    let champsQuery = `select blue, red from games where date > "${seasonStartDate}";`;
+    var champs = await conn.query(champsQuery);
+    champs = champs.slice(0, champs.length);
+    const newChamps = [];
+    champs = champs.forEach((c) => {
+      let blueSplit = c.blue.split(",");
+      let redSplit = c.red.split(",");
+      blueSplit = blueSplit.map((c) => c.match(`[^,].*-(.*)-[^,]+-[^,]+`));
+      redSplit = redSplit.map((c) => c.match(`[^,].*-(.*)-[^,]+-[^,]+`));
+      blueSplit = blueSplit.map((c) => c[1]);
+      redSplit = redSplit.map((c) => c[1]);
+      newChamps.push(...blueSplit, ...redSplit);
+    });
+
+    champs = [...new Set(newChamps)];
+    const func = () => {
+      const promises = champs.map(async (champ) => {
+        let query = `select count(*) as count from games where ((red rlike "[^,]-[^,]+-${champ}-[^,]+-[^,]+" and winning_side="red") or (blue rlike "[^,]+-[^,]+-${champ}-[^,]+-[^,]+" and winning_side="blue")) and map="Summoner's Rift" and date > "${seasonStartDate}";`;
+        const wins = await conn.query(query);
+        query = `select count(*) as count from games where ((red rlike "[^,]-[^,]+-${champ}-[^,]+-[^,]+" and winning_side="blue") or (blue rlike "[^,]+-[^,]+-${champ}-[^,]+-[^,]+" and winning_side="red")) and map="Summoner's Rift" and date > "${seasonStartDate}";`;
+        const loses = await conn.query(query);
+        return {
+          name: champ,
+          count: wins[0].count + loses[0].count,
+          wins: wins[0].count,
+          loses: loses[0].count,
+        };
+      });
+
+      return Promise.all(promises);
+    };
+
+    const champWrArr = await func();
+
+    res.send(champWrArr);
+  } catch (err) {
+    throw err;
+  } finally {
+    if (conn) return conn.release();
+  }
+});
 app.get("/player/:id/map/:map/games", async (req, res) => {
   const { id, map } = req.params;
   let mapF = "";
@@ -322,46 +367,6 @@ app.get("/stats/:id", async (req, res) => {
   }
 });
 
-app.get("/aramStats/:id", async (req, res) => {
-  const { id } = req.params;
-
-  let conn;
-  try {
-    // establish a connection to MariaDB
-    conn = await pool.getConnection();
-    var query = `SELECT id, name FROM players where id = ${id}`;
-    const me = await conn.query(query);
-    query = `SELECT id, name FROM players where id != ${id}`;
-    const others = await conn.query(query);
-    const func = () => {
-      const promises = others.map(async (player) => {
-        query = `SELECT count(*) as count from (SELECT * FROM games WHERE winners LIKE "%${me[0].name}-${me[0].id}%") AS sub WHERE winners LIKE "%${player.name}-${player.id}%" and map="Howling Abyss";`;
-        const teamWinCount = await conn.query(query);
-        query = `SELECT count(*) as count from (SELECT * FROM games WHERE losers LIKE "%${me[0].name}-${me[0].id}%") AS sub WHERE losers LIKE "%${player.name}-${player.id}%" and map="Howling Abyss";`;
-        const teamLoseCount = await conn.query(query);
-        query = `SELECT count(*) as count from (SELECT * FROM games WHERE winners LIKE "%${me[0].name}-${me[0].id}%") AS sub WHERE losers LIKE "%${player.name}-${player.id}%" and map="Howling Abyss";`;
-        const enemyWinCount = await conn.query(query);
-        query = `SELECT count(*) as count from (SELECT * FROM games WHERE losers LIKE "%${me[0].name}-${me[0].id}%") AS sub WHERE winners LIKE "%${player.name}-${player.id}%" and map="Howling Abyss";`;
-        const enemyLoseCount = await conn.query(query);
-        return {
-          player: player.name,
-          teamWins: teamWinCount[0].count,
-          teamLoses: teamLoseCount[0].count,
-          enemyWins: enemyWinCount[0].count,
-          enemyLoses: enemyLoseCount[0].count,
-        };
-      });
-      return Promise.all(promises);
-    };
-    const results = await func();
-    return res.send(results);
-  } catch (err) {
-    throw err;
-  } finally {
-    if (conn) return conn.release();
-  }
-});
-
 app.post("/games", async (req, res) => {
   const {
     map,
@@ -399,8 +404,12 @@ app.post("/games", async (req, res) => {
 
     const probability1 = 1 / (1 + Math.pow(10, (loserSum - winnerSum) / diff));
     const probability2 = 1 / (1 + Math.pow(10, (winnerSum - loserSum) / diff));
-    const winnerRating = k * (1 - probability1);
-    const loserRating = k * (0 - probability2);
+    const winnerRating = Number(k * (1 - probability1) * inflationRate).toFixed(
+      0
+    );
+    const loserRating = Number(
+      (k * (0 - probability2)) / inflationRate
+    ).toFixed(0);
 
     var query = `update players set rating=rating+${winnerRating} where id in (${winnerIds});`;
     await conn.query(query);
@@ -444,7 +453,7 @@ app.post("/player", async (req, res) => {
   let conn;
   try {
     conn = await pool.getConnection();
-    var query = `insert into players (name,wins,loses,winrate,rating) values ("${name}",0,0,0,1500);`;
+    var query = `insert into players (name,wins,loses,winrate,rating) values ("${name}",0,0,0,1200);`;
     var result = await conn.query(query);
 
     res.sendStatus(200);
